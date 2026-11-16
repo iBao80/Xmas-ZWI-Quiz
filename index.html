@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>🎄 Weihnachts-Quiz Show – Live Team-Edition</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- React & ReactDOM (Production) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel für JSX direkt im Browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- PeerJS für kostenlose Echtzeit-Verbindung zwischen Host-Laptop & Smartphones (ohne Datenbank-Account!) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #090d16;
+      color: #ffffff;
+      overflow-x: hidden;
+    }
+    @keyframes snowfall {
+      0% { transform: translateY(-10vh) translateX(0px) rotate(0deg); }
+      50% { transform: translateY(50vh) translateX(22px) rotate(180deg); }
+      100% { transform: translateY(110vh) translateX(-15px) rotate(360deg); }
+    }
+    .snowflake-anim {
+      position: absolute;
+      top: -5%;
+      animation-name: snowfall;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // ==========================================
+    // 1. KONSTANTEN & WEIHNACHTS-AVATARE
+    // ==========================================
+    const PEER_PREFIX = 'xmas-quiz-2026-pin-';
+
+    const AVATARS = [
+      { id: 'santa', emoji: '🎅', name: 'Weihnachtsmann' },
+      { id: 'reindeer', emoji: '🦌', name: 'Rudolph' },
+      { id: 'snowman', emoji: '⛄', name: 'Frosty' },
+      { id: 'elf', emoji: '🧝', name: 'Wichtel' },
+      { id: 'gingerbread', emoji: '🍪', name: 'Lebkuchen' },
+      { id: 'penguin', emoji: '🐧', name: 'Pinguin' },
+      { id: 'tree', emoji: '🎄', name: 'Tannenbaum' },
+      { id: 'angel', emoji: '👼', name: 'Engelchen' },
+      { id: 'star', emoji: '🌟', name: 'Sternschnuppe' },
+      { id: 'gift', emoji: '🎁', name: 'Geschenk' }
+    ];
+
+    const KAHOOT_COLORS = [
+      { bg: 'bg-red-600 hover:bg-red-500', border: 'border-red-800', shape: '▲', name: 'Rot' },
+      { bg: 'bg-blue-600 hover:bg-blue-500', border: 'border-blue-800', shape: '◆', name: 'Blau' },
+      { bg: 'bg-amber-500 hover:bg-amber-400', border: 'border-amber-700', shape: '●', name: 'Goldgelb' },
+      { bg: 'bg-emerald-600 hover:bg-emerald-500', border: 'border-emerald-800', shape: '■', name: 'Grün' }
+    ];
+
+    const DEFAULT_QUESTIONS = [
+      {
+        id: 'q1',
+        type: 'mc',
+        text: 'Wie heißt das berühmteste Rentier mit der leuchtend roten Nase?',
+        timeLimit: 20,
+        options: ['Blitzen', 'Rudolph', 'Donner', 'Olaf'],
+        correctIndex: 1,
+        explanation: 'Rudolph the Red-Nosed Reindeer wurde 1939 von Robert L. May erfunden.'
+      },
+      {
+        id: 'q2',
+        type: 'tf',
+        text: 'Wahr oder Falsch: Der moderne rot-weiße Weihnachtsmann wurde ursprünglich von Coca-Cola erfunden.',
+        timeLimit: 15,
+        options: ['Wahr', 'Falsch'],
+        correctIndex: 1,
+        explanation: 'Falsch! Es gab schon vorher rot-weiße Darstellungen, Coca-Cola machte das Design ab 1931 nur weltweit bekannt.'
+      },
+      {
+        id: 'q3',
+        type: 'estimate',
+        text: 'Schätzfrage: In welchem Jahr wurde das berühmte Weihnachtslied „Stille Nacht, heilige Nacht“ zum ersten Mal aufgeführt?',
+        timeLimit: 25,
+        correctNumber: 1818,
+        tolerance: 50,
+        explanation: 'Es wurde am 24. Dezember 1818 in Oberndorf bei Salzburg uraufgeführt!'
+      },
+      {
+        id: 'q4',
+        type: 'mc',
+        text: 'Wohin fliegt die Familie McCallister im Filmklassiker „Kevin – Allein zu Haus“ (Teil 1) in den Weihnachtsurlaub?',
+        timeLimit: 20,
+        options: ['London', 'Rom', 'Paris', 'Miami'],
+        correctIndex: 2,
+        explanation: 'Die Familie fliegt nach Paris, während Kevin versehentlich in Chicago vergessen wird.'
+      },
+      {
+        id: 'q5',
+        type: 'mc',
+        text: 'Welches Land schenkt der Stadt London seit 1947 jedes Jahr den großen Weihnachtsbaum am Trafalgar Square?',
+        timeLimit: 20,
+        options: ['Norwegen', 'Schweden', 'Deutschland', 'Kanada'],
+        correctIndex: 0,
+        explanation: 'Norwegen schenkt den Baum als Dank für die britische Unterstützung im Zweiten Weltkrieg.'
+      },
+      {
+        id: 'q6',
+        type: 'estimate',
+        text: 'Schätzfrage: Wie viele Nadeln hat eine durchschnittliche, 2 Meter große Nordmanntanne ungefähr (in Tausend)?',
+        timeLimit: 25,
+        correctNumber: 300,
+        tolerance: 150,
+        explanation: 'Eine etwa 2 Meter hohe Tanne trägt rund 250.000 bis 350.000 (also ca. 300 Tausend) Nadeln!'
+      },
+      {
+        id: 'q7',
+        type: 'tf',
+        text: 'Wahr oder Falsch: Das Lied „Jingle Bells“ wurde ursprünglich gar nicht für Weihnachten, sondern für Thanksgiving geschrieben.',
+        timeLimit: 15,
+        options: ['Wahr', 'Falsch'],
+        correctIndex: 0,
+        explanation: 'Wahr! James Lord Pierpont schrieb „One Horse Open Sleigh“ 1857 eigentlich für das Erntedankfest.'
+      },
+      {
+        id: 'q8',
+        type: 'mc',
+        text: 'Welches Gewürz gehört klassischerweise NICHT in ein traditionelles Nürnberger Lebkuchengewürz?',
+        timeLimit: 20,
+        options: ['Kardamom', 'Piment', 'Kurkuma', 'Muskatblüte'],
+        correctIndex: 2,
+        explanation: 'Zimt, Nelken, Piment, Kardamom, Koriander, Ingwer und Muskat gehören hinein – Kurkuma jedoch nicht.'
+      },
+      {
+        id: 'q9',
+        type: 'mc',
+        text: 'Was feiern die Menschen in Japan traditionell am Weihnachtsabend mit einem überraschenden Festmahl?',
+        timeLimit: 20,
+        options: ['Sushi-Pyramide', 'Hähnchen von KFC', 'Pizza Hawaii', 'Ramen-Fondue'],
+        correctIndex: 1,
+        explanation: 'Durch eine legendäre Kampagne von 1974 bestellen Millionen Japaner an Weihnachten KFC!'
+      },
+      {
+        id: 'q10',
+        type: 'estimate',
+        text: 'Schätzfrage: Wie viele Schokoladen-Weihnachtsmänner werden jedes Jahr allein in Deutschland produziert (in Millionen)?',
+        timeLimit: 25,
+        correctNumber: 160,
+        tolerance: 60,
+        explanation: 'Rund 150 bis 165 Millionen Schoko-Weihnachtsmänner werden jährlich in Deutschland hergestellt!'
+      }
+    ];
+
+    // ==========================================
+    // 2. WEB-AUDIO SOUND ENGINE
+    // ==========================================
+    class ChristmasSoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx && typeof window !== 'undefined') {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playTone(freq, type = 'sine', duration = 0.2, delay = 0, vol = 0.12) {
+        if (this.muted) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + delay);
+          gain.gain.setValueAtTime(0.001, this.ctx.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(vol, this.ctx.currentTime + delay + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + delay + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + delay);
+          osc.stop(this.ctx.currentTime + delay + duration + 0.02);
+        } catch (e) {}
+      }
+      playClick() { this.playTone(660, 'triangle', 0.08, 0, 0.1); }
+      playJoin() {
+        this.playTone(523.25, 'sine', 0.15, 0, 0.1);
+        this.playTone(659.25, 'sine', 0.15, 0.08, 0.1);
+        this.playTone(783.99, 'sine', 0.25, 0.16, 0.12);
+        this.playTone(1046.50, 'sine', 0.35, 0.24, 0.12);
+      }
+      playTick(urgent = false) {
+        if (urgent) {
+          this.playTone(880, 'square', 0.09, 0, 0.08);
+          this.playTone(440, 'triangle', 0.09, 0.1, 0.06);
+        } else {
+          this.playTone(520, 'triangle', 0.07, 0, 0.07);
+        }
+      }
+      playAnswerSubmitted() {
+        this.playTone(587.33, 'sine', 0.12, 0, 0.1);
+        this.playTone(880, 'sine', 0.2, 0.08, 0.12);
+      }
+      playCorrect() {
+        this.playTone(523.25, 'triangle', 0.15, 0, 0.15);
+        this.playTone(659.25, 'triangle', 0.15, 0.1, 0.15);
+        this.playTone(783.99, 'triangle', 0.15, 0.2, 0.15);
+        this.playTone(1046.50, 'triangle', 0.45, 0.3, 0.18);
+      }
+      playJingleBellsMotif() {
+        const notes = [
+          { f: 659.25, d: 0.18, t: 0 }, { f: 659.25, d: 0.18, t: 0.22 }, { f: 659.25, d: 0.35, t: 0.44 },
+          { f: 659.25, d: 0.18, t: 0.90 }, { f: 659.25, d: 0.18, t: 1.12 }, { f: 659.25, d: 0.35, t: 1.34 },
+          { f: 659.25, d: 0.18, t: 1.80 }, { f: 783.99, d: 0.18, t: 2.02 }, { f: 523.25, d: 0.25, t: 2.24 },
+          { f: 587.33, d: 0.15, t: 2.52 }, { f: 659.25, d: 0.60, t: 2.70 }
+        ];
+        notes.forEach(n => this.playTone(n.f, 'sine', n.d, n.t, 0.08));
+      }
+      playFanfare() {
+        const notes = [
+          { f: 523.25, d: 0.2, t: 0 }, { f: 523.25, d: 0.2, t: 0.22 }, { f: 523.25, d: 0.2, t: 0.44 },
+          { f: 659.25, d: 0.45, t: 0.66 }, { f: 587.33, d: 0.25, t: 1.15 }, { f: 659.25, d: 0.25, t: 1.42 },
+          { f: 783.99, d: 0.7, t: 1.70 }, { f: 1046.50, d: 0.9, t: 2.10 }
+        ];
+        notes.forEach(n => this.playTone(n.f, 'triangle', n.d, n.t, 0.15));
+      }
+    }
+
+    const sound = new ChristmasSoundEngine();
+
+    // ==========================================
+    // 3. PUNKTEBERECHNUNG (INKL. SPEED-BONUS)
+    // ==========================================
+    function calculateScore(question, answerValue, timeTakenMs) {
+      const maxTimeMs = (question.timeLimit || 20) * 1000;
+      const clampedTime = Math.max(0, Math.min(maxTimeMs, timeTakenMs));
+      const speedRatio = 1 - (clampedTime / maxTimeMs);
+
+      if (question.type === 'mc' || question.type === 'tf') {
+        const isCorrect = Number(answerValue) === Number(question.correctIndex);
+        if (!isCorrect) return { isCorrect: false, points: 0 };
+        return { isCorrect: true, points: 500 + Math.round(500 * speedRatio) };
+      }
+
+      if (question.type === 'estimate') {
+        const numAnswer = parseFloat(String(answerValue).replace(',', '.'));
+        if (isNaN(numAnswer)) return { isCorrect: false, points: 0 };
+        const target = Number(question.correctNumber);
+        const tolerance = Math.max(1, Number(question.tolerance) || Math.abs(target * 0.25) || 10);
+        const diff = Math.abs(numAnswer - target);
+
+        if (diff === 0) {
+          return { isCorrect: true, points: 1000 + Math.round(200 * speedRatio) };
+        } else if (diff <= tolerance) {
+          const accuracyRatio = 1 - (diff / tolerance);
+          return { isCorrect: true, points: Math.round(300 + 550 * accuracyRatio) + Math.round(150 * speedRatio) };
+        } else if (diff <= tolerance * 2) {
+          const nearRatio = 1 - ((diff - tolerance) / tolerance);
+          return { isCorrect: true, points: Math.round(100 + 150 * nearRatio) };
+        }
+        return { isCorrect: false, points: 0 };
+      }
+      return { isCorrect: false, points: 0 };
+    }
+
+    // ==========================================
+    // 4. SCHNEEFALL OVERLAY
+    // ==========================================
+    const SnowfallOverlay = ({ enabled }) => {
+      const flakes = useMemo(() => {
+        return Array.from({ length: 35 }).map((_, i) => ({
+          id: i,
+          left: `${(i * 2.9) % 100}%`,
+          duration: `${8 + (i % 9) * 1.5}s`,
+          delay: `${(i % 7) * -1.3}s`,
+          size: `${10 + (i % 4) * 5}px`,
+          opacity: 0.25 + ((i % 5) * 0.12)
+        }));
+      }, []);
+
+      if (!enabled) return null;
+      return (
+        <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+          {flakes.map(f => (
+            <div
+              key={f.id}
+              className="snowflake-anim text-white select-none"
+              style={{
+                left: f.left,
+                animationDuration: f.duration,
+                animationDelay: f.delay,
+                fontSize: f.size,
+                opacity: f.opacity
+              }}
+            >
+              ❄
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 5. HAUPT-APP KOMPONENTE
+    // ==========================================
+    function App() {
+      const [snowEnabled, setSnowEnabled] = useState(true);
+      const [soundMuted, setSoundMuted] = useState(false);
+      const [notification, setNotification] = useState(null);
+      const [view, setView] = useState('home');
+
+      // Fragenkatalog aus LocalStorage laden oder Standard-Fragen nutzen
+      const [questions, setQuestions] = useState(() => {
+        try {
+          const saved = localStorage.getItem('xmas_quiz_custom_questions_v1');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        } catch (e) {}
+        return DEFAULT_QUESTIONS;
+      });
+
+      // Live-Multiplayer State (PeerJS WebRTC Echtzeit-Raum)
+      const [roomPin, setRoomPin] = useState('');
+      const [roomData, setRoomData] = useState(null);
+      const [peerStatus, setPeerStatus] = useState('idle'); // 'connecting' | 'ready' | 'error'
+      const [joinPinInput, setJoinPinInput] = useState('');
+      const [playerName, setPlayerName] = useState('');
+      const [playerAvatar, setPlayerAvatar] = useState(AVATARS[0]);
+      const [myPlayerId] = useState(() => 'p_' + Math.random().toString(36).substring(2, 10));
+      const [mySubmittedAnswer, setMySubmittedAnswer] = useState(null);
+      const [estimateInput, setEstimateInput] = useState('');
+      const [qrZoomModal, setQrZoomModal] = useState(false);
+      const [autoDetectedPin, setAutoDetectedPin] = useState(false);
+
+      // PeerJS Referenzen
+      const hostPeerRef = useRef(null);
+      const hostConnectionsRef = useRef({});
+      const roomStateRef = useRef(null);
+      const playerPeerRef = useRef(null);
+      const playerConnRef = useRef(null);
+
+      // Lokaler Moderator-Modus State
+      const [localTeams, setLocalTeams] = useState([
+        { id: 't1', name: 'Team Rentier', avatar: '🦌', score: 0, streak: 0, lastPoints: 0 },
+        { id: 't2', name: 'Team Wichtel', avatar: '🧝', score: 0, streak: 0, lastPoints: 0 },
+        { id: 't3', name: 'Team Lebkuchen', avatar: '🍪', score: 0, streak: 0, lastPoints: 0 }
+      ]);
+      const [newTeamName, setNewTeamName] = useState('');
+      const [newTeamAvatar, setNewTeamAvatar] = useState(AVATARS[0]);
+      const [localGameState, setLocalGameState] = useState({
+        qIndex: 0,
+        phase: 'question',
+        teamAnswers: {},
+        activeTeamId: 't1'
+      });
+
+      const [timeLeft, setTimeLeft] = useState(20);
+      const questionStartRef = useRef(Date.now());
+
+      const showToast = (msg) => {
+        setNotification(msg);
+        setTimeout(() => setNotification(null), 3500);
+      };
+
+      const copyToClipboard = (text, msg = 'Link in die Zwischenablage kopiert!') => {
+        sound.playClick();
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text);
+            showToast(msg);
+            return;
+          }
+        } catch (e) {}
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast(msg);
+      };
+
+      // Automatische Erkennung der aktuellen GitHub-Pages URL + ?pin=XXXXXX
+      const fullJoinUrl = useMemo(() => {
+        if (typeof window === 'undefined') return '';
+        const url = new URL(window.location.href);
+        url.hash = '';
+        if (roomPin) url.searchParams.set('pin', roomPin);
+        return url.toString();
+      }, [roomPin]);
+
+      const qrCodeImageUrl = useMemo(() => {
+        const encoded = encodeURIComponent(fullJoinUrl || window.location.href);
+        return `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&color=0f172a&bgcolor=ffffff&ecc=M&data=${encoded}`;
+      }, [fullJoinUrl]);
+
+      // Prüfen, ob ein Kollege per QR-Code (?pin=123456) auf die Seite gekommen ist
+      useEffect(() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const foundPin = params.get('pin');
+          if (foundPin && /^\d{4,6}$/.test(foundPin.trim())) {
+            setJoinPinInput(foundPin.trim());
+            setAutoDetectedPin(true);
+            setView('player_join');
+          }
+        } catch (e) {}
+      }, []);
+
+      // Hilfsfunktion: Raum-Status an alle verbundenen Smartphones senden
+      const broadcastRoomState = (nextState) => {
+        roomStateRef.current = nextState;
+        setRoomData({ ...nextState });
+        Object.values(hostConnectionsRef.current).forEach((conn) => {
+          if (conn && conn.open) {
+            try {
+              conn.send({ type: 'ROOM_UPDATE', room: nextState });
+            } catch (e) {}
+          }
+        });
+      };
+
+      // ==========================================
+      // HOST: LIVE-RAUM MIT PEERJS STARTEN
+      // ==========================================
+      const createLiveRoom = () => {
+        sound.playClick();
+        if (hostPeerRef.current) {
+          hostPeerRef.current.destroy();
+        }
+
+        const generatedPin = String(Math.floor(100000 + Math.random() * 900000));
+        const initialRoom = {
+          pin: generatedPin,
+          status: 'lobby',
+          currentQuestionIndex: 0,
+          questionStartTime: Date.now(),
+          questions: questions,
+          players: {}
+        };
+
+        setRoomPin(generatedPin);
+        roomStateRef.current = initialRoom;
+        setRoomData(initialRoom);
+        setPeerStatus('connecting');
+        setView('host_lobby');
+
+        try {
+          const peer = new window.Peer(PEER_PREFIX + generatedPin);
+          hostPeerRef.current = peer;
+
+          peer.on('open', () => {
+            setPeerStatus('ready');
+            sound.playJingleBellsMotif();
+          });
+
+          peer.on('connection', (conn) => {
+            conn.on('data', (msg) => {
+              if (!msg || !roomStateRef.current) return;
+
+              // Spieler tritt der Lobby bei
+              if (msg.type === 'JOIN') {
+                hostConnectionsRef.current[msg.playerId] = conn;
+                sound.playJoin();
+                const current = { ...roomStateRef.current };
+                current.players = {
+                  ...current.players,
+                  [msg.playerId]: {
+                    id: msg.playerId,
+                    name: msg.name,
+                    avatar: msg.avatar,
+                    score: current.players[msg.playerId]?.score || 0,
+                    streak: current.players[msg.playerId]?.streak || 0,
+                    lastPoints: 0,
+                    lastAnswer: null,
+                    lastAnsweredQ: -1
+                  }
+                };
+                broadcastRoomState(current);
+              }
+
+              // Spieler sendet Antwort
+              if (msg.type === 'ANSWER') {
+                const current = { ...roomStateRef.current };
+                const p = current.players[msg.playerId];
+                if (p && current.status === 'question') {
+                  current.players = {
+                    ...current.players,
+                    [msg.playerId]: {
+                      ...p,
+                      lastAnswer: msg.answer,
+                      lastAnswerTimeMs: msg.timeTakenMs,
+                      lastAnsweredQ: current.currentQuestionIndex
+                    }
+                  };
+                  broadcastRoomState(current);
+                }
+              }
+            });
+          });
+
+          peer.on('error', (err) => {
+            console.error('Peer Error:', err);
+            setPeerStatus('error');
+          });
+        } catch (err) {
+          setPeerStatus('error');
+        }
+      };
+
+      // Demo-Wichtel (Bot) in die Lobby setzen
+      const addDemoBotToLobby = () => {
+        if (!roomStateRef.current) return;
+        sound.playJoin();
+        const botNames = ['Wichtel Max', 'Rentier Maja', 'Frosty Tim', 'Lebkuchen Lisa', 'Rudolph 007'];
+        const existingCount = Object.keys(roomStateRef.current.players || {}).length;
+        const botId = `bot_${Date.now()}_${Math.floor(Math.random() * 100)}`;
+        const next = {
+          ...roomStateRef.current,
+          players: {
+            ...roomStateRef.current.players,
+            [botId]: {
+              id: botId,
+              name: botNames[existingCount % botNames.length],
+              avatar: AVATARS[(existingCount + 1) % AVATARS.length].emoji,
+              score: 0,
+              streak: 0,
+              lastPoints: 0,
+              lastAnswer: null,
+              lastAnsweredQ: -1,
+              isBot: true
+            }
+          }
+        };
+        broadcastRoomState(next);
+      };
+
+      const triggerBotAnswers = (qIndex) => {
+        const current = roomStateRef.current;
+        if (!current || !current.players) return;
+        const currentQ = current.questions?.[qIndex];
+        if (!currentQ) return;
+
+        Object.values(current.players).forEach((p) => {
+          if (!p.isBot) return;
+          const delayMs = 2000 + Math.floor(Math.random() * 6000);
+          setTimeout(() => {
+            const live = roomStateRef.current;
+            if (!live || live.status !== 'question' || live.currentQuestionIndex !== qIndex) return;
+
+            let botAnswer = 0;
+            if (currentQ.type === 'mc') {
+              botAnswer = Math.random() < 0.65 ? currentQ.correctIndex : Math.floor(Math.random() * 4);
+            } else if (currentQ.type === 'tf') {
+              botAnswer = Math.random() < 0.7 ? currentQ.correctIndex : (currentQ.correctIndex === 0 ? 1 : 0);
+            } else if (currentQ.type === 'estimate') {
+              const variance = (currentQ.tolerance || 30) * (Math.random() * 1.6 - 0.8);
+              botAnswer = Math.round(Number(currentQ.correctNumber) + variance);
+            }
+
+            const updated = {
+              ...live,
+              players: {
+                ...live.players,
+                [p.id]: {
+                  ...live.players[p.id],
+                  lastAnswer: botAnswer,
+                  lastAnswerTimeMs: delayMs,
+                  lastAnsweredQ: qIndex
+                }
+              }
+            };
+            broadcastRoomState(updated);
+          }, delayMs);
+        });
+      };
+
+      const startHostGame = () => {
+        if (!roomStateRef.current) return;
+        const playerCount = Object.keys(roomStateRef.current.players || {}).length;
+        if (playerCount === 0) {
+          showToast('Mindestens 1 Spieler (oder Test-Wichtel) muss in der Lobby sein!');
+          return;
+        }
+        sound.playClick();
+        const now = Date.now();
+        const next = {
+          ...roomStateRef.current,
+          status: 'question',
+          currentQuestionIndex: 0,
+          questionStartTime: now
+        };
+        setTimeLeft(next.questions[0]?.timeLimit || 20);
+        broadcastRoomState(next);
+        setView('host_game');
+        triggerBotAnswers(0);
+      };
+
+      const handleHostRevealAnswer = () => {
+        const current = roomStateRef.current;
+        if (!current || current.status !== 'question') return;
+        const qIndex = current.currentQuestionIndex;
+        const currentQ = current.questions?.[qIndex];
+        if (!currentQ) return;
+
+        const updatedPlayers = { ...(current.players || {}) };
+        Object.keys(updatedPlayers).forEach((pid) => {
+          const p = { ...updatedPlayers[pid] };
+          if (p.lastAnsweredQ === qIndex && p.lastAnswer !== null && p.lastAnswer !== undefined) {
+            const res = calculateScore(currentQ, p.lastAnswer, p.lastAnswerTimeMs || 10000);
+            if (res.isCorrect) {
+              const newStreak = (p.streak || 0) + 1;
+              const streakBonus = newStreak >= 3 ? 100 : newStreak === 2 ? 50 : 0;
+              const gained = res.points + streakBonus;
+              p.score = (p.score || 0) + gained;
+              p.streak = newStreak;
+              p.lastPoints = gained;
+              p.lastCorrect = true;
+            } else {
+              p.streak = 0;
+              p.lastPoints = 0;
+              p.lastCorrect = false;
+            }
+          } else {
+            p.streak = 0;
+            p.lastPoints = 0;
+            p.lastCorrect = false;
+          }
+          updatedPlayers[pid] = p;
+        });
+
+        sound.playCorrect();
+        broadcastRoomState({
+          ...current,
+          status: 'reveal',
+          players: updatedPlayers
+        });
+      };
+
+      const handleHostNextStep = () => {
+        const current = roomStateRef.current;
+        if (!current) return;
+        sound.playClick();
+        const totalQuestions = current.questions?.length || 0;
+        const qIndex = current.currentQuestionIndex;
+
+        if (current.status === 'reveal') {
+          if (qIndex + 1 >= totalQuestions) {
+            sound.playFanfare();
+            broadcastRoomState({ ...current, status: 'podium' });
+          } else {
+            broadcastRoomState({ ...current, status: 'leaderboard' });
+          }
+        } else if (current.status === 'leaderboard') {
+          const nextIdx = qIndex + 1;
+          const now = Date.now();
+          setTimeLeft(current.questions[nextIdx]?.timeLimit || 20);
+          broadcastRoomState({
+            ...current,
+            status: 'question',
+            currentQuestionIndex: nextIdx,
+            questionStartTime: now
+          });
+          triggerBotAnswers(nextIdx);
+        }
+      };
+
+      // ==========================================
+      // SPIELER (SMARTPHONE): VERBINDEN MIT HOST
+      // ==========================================
+      const handlePlayerJoinRoom = (e) => {
+        e.preventDefault();
+        const cleanPin = joinPinInput.trim();
+        const cleanName = playerName.trim();
+        if (!cleanPin || cleanPin.length < 4) {
+          showToast('Bitte gültigen 6-stelligen Raum-PIN eingeben!');
+          return;
+        }
+        if (!cleanName) {
+          showToast('Bitte gib deinen Spielernamen ein!');
+          return;
+        }
+
+        showToast('Verbinde mit Quiz-Raum...');
+        if (playerPeerRef.current) playerPeerRef.current.destroy();
+
+        const peer = new window.Peer();
+        playerPeerRef.current = peer;
+
+        peer.on('open', () => {
+          const conn = peer.connect(PEER_PREFIX + cleanPin, { reliable: true });
+          playerConnRef.current = conn;
+
+          conn.on('open', () => {
+            sound.playJoin();
+            setRoomPin(cleanPin);
+            conn.send({
+              type: 'JOIN',
+              playerId: myPlayerId,
+              name: cleanName,
+              avatar: playerAvatar.emoji
+            });
+            setView('player_game');
+          });
+
+          conn.on('data', (msg) => {
+            if (msg && msg.type === 'ROOM_UPDATE' && msg.room) {
+              setRoomData(msg.room);
+            }
+          });
+
+          conn.on('error', () => {
+            showToast('Verbindung zum Raum fehlgeschlagen.');
+          });
+        });
+
+        peer.on('error', () => {
+          showToast('Raum-PIN nicht gefunden! Ist die Lobby auf dem Hauptbildschirm offen?');
+        });
+      };
+
+      const submitPlayerAnswer = (answerVal) => {
+        if (!roomData || mySubmittedAnswer !== null) return;
+        const timeTakenMs = Math.max(200, Date.now() - questionStartRef.current);
+        setMySubmittedAnswer(answerVal);
+        sound.playAnswerSubmitted();
+
+        if (playerConnRef.current && playerConnRef.current.open) {
+          playerConnRef.current.send({
+            type: 'ANSWER',
+            playerId: myPlayerId,
+            answer: answerVal,
+            timeTakenMs
+          });
+        }
+      };
+
+      // Reset für Spieler bei neuer Frage
+      useEffect(() => {
+        if (!roomData) return;
+        if (roomData.status === 'question') {
+          setMySubmittedAnswer(null);
+          setEstimateInput('');
+          questionStartRef.current = Date.now();
+          const currentQ = roomData.questions?.[roomData.currentQuestionIndex];
+          if (currentQ) setTimeLeft(currentQ.timeLimit || 20);
+        }
+      }, [roomData?.status, roomData?.currentQuestionIndex]);
+
+      // Countdown-Timer
+      useEffect(() => {
+        const isHostQ = view === 'host_game' && roomData?.status === 'question';
+        const isPlayerQ = view === 'player_game' && roomData?.status === 'question';
+        const isLocalQ = view === 'local_game' && localGameState.phase === 'question';
+        if (!isHostQ && !isPlayerQ && !isLocalQ) return;
+
+        const timer = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              if (isHostQ) handleHostRevealAnswer();
+              return 0;
+            }
+            if (isHostQ || isLocalQ) sound.playTick(prev <= 6);
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(timer);
+      }, [view, roomData?.status, roomData?.currentQuestionIndex, localGameState.phase, localGameState.qIndex]);
+
+      // Automatisch auflösen, wenn alle Spieler geantwortet haben
+      useEffect(() => {
+        if (view !== 'host_game' || !roomData || roomData.status !== 'question') return;
+        const pList = Object.values(roomData.players || {});
+        if (pList.length === 0) return;
+        const allAnswered = pList.every(p => p.lastAnsweredQ === roomData.currentQuestionIndex);
+        if (allAnswered) {
+          const t = setTimeout(() => handleHostRevealAnswer(), 600);
+          return () => clearTimeout(t);
+        }
+      }, [view, roomData]);
+
+      // ==========================================
+      // LOKALER MODERATOR-MODUS
+      // ==========================================
+      const startLocalModeGame = () => {
+        if (localTeams.length === 0) {
+          showToast('Bitte mindestens 1 Team anlegen!');
+          return;
+        }
+        sound.playJingleBellsMotif();
+        const reset = localTeams.map(t => ({ ...t, score: 0, streak: 0, lastPoints: 0, lastCorrect: false }));
+        setLocalTeams(reset);
+        setLocalGameState({
+          qIndex: 0,
+          phase: 'question',
+          teamAnswers: {},
+          activeTeamId: reset[0].id
+        });
+        setTimeLeft(questions[0]?.timeLimit || 20);
+        questionStartRef.current = Date.now();
+        setView('local_game');
+      };
+
+      const recordLocalTeamAnswer = (teamId, answerVal) => {
+        sound.playAnswerSubmitted();
+        const elapsedMs = Math.max(300, Date.now() - questionStartRef.current);
+        setLocalGameState(prev => {
+          const updatedAnswers = { ...prev.teamAnswers, [teamId]: { answer: answerVal, timeMs: elapsedMs } };
+          const nextUnanswered = localTeams.find(t => !updatedAnswers[t.id]);
+          return {
+            ...prev,
+            teamAnswers: updatedAnswers,
+            activeTeamId: nextUnanswered ? nextUnanswered.id : prev.activeTeamId
+          };
+        });
+      };
+
+      const revealLocalQuestion = () => {
+        const currentQ = questions[localGameState.qIndex];
+        if (!currentQ) return;
+        const updatedTeams = localTeams.map(team => {
+          const entry = localGameState.teamAnswers[team.id];
+          if (!entry) return { ...team, streak: 0, lastPoints: 0, lastCorrect: false };
+          const res = calculateScore(currentQ, entry.answer, entry.timeMs);
+          if (res.isCorrect) {
+            const newStreak = (team.streak || 0) + 1;
+            const streakBonus = newStreak >= 3 ? 100 : newStreak === 2 ? 50 : 0;
+            const gained = res.points + streakBonus;
+            return { ...team, score: team.score + gained, streak: newStreak, lastPoints: gained, lastCorrect: true };
+          }
+          return { ...team, streak: 0, lastPoints: 0, lastCorrect: false };
+        });
+        sound.playCorrect();
+        setLocalTeams(updatedTeams);
+        setLocalGameState(prev => ({ ...prev, phase: 'reveal' }));
+      };
+
+      const nextLocalStep = () => {
+        sound.playClick();
+        const totalQ = questions.length;
+        const qIndex = localGameState.qIndex;
+        if (localGameState.phase === 'reveal') {
+          if (qIndex + 1 >= totalQ) {
+            sound.playFanfare();
+            setLocalGameState(prev => ({ ...prev, phase: 'podium' }));
+          } else {
+            setLocalGameState(prev => ({ ...prev, phase: 'leaderboard' }));
+          }
+        } else if (localGameState.phase === 'leaderboard') {
+          const nextIdx = qIndex + 1;
+          setTimeLeft(questions[nextIdx]?.timeLimit || 20);
+          questionStartRef.current = Date.now();
+          setLocalGameState({
+            qIndex: nextIdx,
+            phase: 'question',
+            teamAnswers: {},
+            activeTeamId: localTeams[0]?.id || 't1'
+          });
+        }
+      };
+
+      const saveCustomQuestions = (updated) => {
+        setQuestions(updated);
+        try {
+          localStorage.setItem('xmas_quiz_custom_questions_v1', JSON.stringify(updated));
+        } catch (e) {}
+        showToast('Fragenkatalog gespeichert!');
+      };
+
+      const getSortedPlayers = (arr) => [...(arr || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+      // ==========================================
+      // RENDER: HEADER
+      // ==========================================
+      const renderHeader = () => (
+        <header className="relative z-20 flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-red-950/85 backdrop-blur-md border-b border-amber-500/30 shadow-lg">
+          <div onClick={() => { sound.playClick(); setView('home'); }} className="flex items-center gap-3 cursor-pointer">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-2xl shadow-md">
+              🎄
+            </div>
+            <div>
+              <h1 className="font-extrabold text-lg sm:text-xl tracking-tight text-amber-100 flex items-center gap-2">
+                XMAS KAHOOT! <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full">Live Edition</span>
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {roomPin && (view === 'host_lobby' || view === 'host_game') && (
+              <button
+                onClick={() => setQrZoomModal(true)}
+                className="flex items-center gap-2 bg-emerald-950/90 hover:bg-emerald-900 border border-amber-400/50 px-3 py-1.5 rounded-xl"
+              >
+                <span className="text-xs text-emerald-200 font-bold">📱 QR & PIN:</span>
+                <span className="font-mono font-black text-lg text-amber-300 tracking-widest">{roomPin}</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setSnowEnabled(!snowEnabled)}
+              className={`px-3 py-2 rounded-xl border text-sm font-bold ${snowEnabled ? 'bg-emerald-800/70 border-emerald-400/40' : 'bg-red-900/40 border-white/10 opacity-50'}`}
+              title="Schneefall an/aus"
+            >
+              ❄️
+            </button>
+
+            <button
+              onClick={() => {
+                const nextMute = !soundMuted;
+                setSoundMuted(nextMute);
+                sound.muted = nextMute;
+              }}
+              className={`px-3 py-2 rounded-xl border text-sm font-bold ${!soundMuted ? 'bg-amber-500/20 border-amber-400/50' : 'bg-red-900/40 border-white/10 opacity-50'}`}
+              title="Ton an/aus"
+            >
+              {soundMuted ? '🔇' : '🔊'}
+            </button>
+
+            {view !== 'home' && (
+              <button
+                onClick={() => { sound.playClick(); setView('home'); }}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs sm:text-sm font-semibold text-white border border-white/15"
+              >
+                Startmenü
+              </button>
+            )}
+          </div>
+        </header>
+      );
+
+      // ==========================================
+      // RENDER: DIREKT-BEITRITT PER QR-SCAN
+      // ==========================================
+      const renderPlayerJoinScreen = () => (
+        <div className="relative z-10 max-w-md mx-auto px-4 py-8 sm:py-12">
+          <div className="bg-gradient-to-b from-emerald-900/95 to-emerald-950/95 border-2 border-amber-400 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-3">
+                📱 {autoDetectedPin ? 'QR-Code erkannt • Direkt-Beitritt' : 'Smartphone Login'}
+              </div>
+              <h2 className="text-3xl font-black text-white mb-1">Willkommen beim Quiz!</h2>
+              <p className="text-emerald-200/80 text-sm">
+                Gib deinen Namen ein und wähle deinen Weihnachts-Avatar!
+              </p>
+            </div>
+
+            <form onSubmit={handlePlayerJoinRoom} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-200 mb-1">
+                  Raum-PIN
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={joinPinInput}
+                  onChange={(e) => setJoinPinInput(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-4 py-3 rounded-2xl bg-black/50 border-2 border-amber-400 text-center font-mono text-3xl font-black tracking-widest text-amber-300 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-200 mb-1">
+                  Dein Spielername
+                </label>
+                <input
+                  type="text"
+                  maxLength={18}
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="z.B. Wichtel Anna"
+                  autoFocus
+                  className="w-full px-4 py-3.5 rounded-2xl bg-black/50 border-2 border-white/25 text-white text-lg font-bold placeholder-white/30 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-200 mb-2">
+                  Avatar: <span className="text-white">{playerAvatar.name}</span>
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {AVATARS.map((av) => (
+                    <button
+                      type="button"
+                      key={av.id}
+                      onClick={() => { sound.playClick(); setPlayerAvatar(av); }}
+                      className={`p-2.5 rounded-xl text-2xl flex items-center justify-center transition-all ${
+                        playerAvatar.id === av.id ? 'bg-amber-500 scale-110 shadow-lg ring-2 ring-white' : 'bg-white/10 hover:bg-white/20'
+                      }`}
+                    >
+                      {av.emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-red-950 font-black text-xl shadow-xl"
+              >
+                🚀 Jetzt beitreten!
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+
+      // ==========================================
+      // RENDER: STARTMENÜ
+      // ==========================================
+      const renderHome = () => (
+        <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 sm:py-12">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-200 text-sm font-medium mb-4">
+              ✨ Festliches Live-Quiz mit QR-Code & Geschwindigkeits-Bonus
+            </div>
+            <h2 className="text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200 mb-4">
+              Weihnachts-Quiz Show
+            </h2>
+            <p className="text-emerald-100/90 max-w-2xl mx-auto text-base sm:text-lg">
+              Starte einen Live-Raum mit QR-Code für alle Smartphones im Team oder spiele direkt gemeinsam über einen Bildschirm!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Karte 1: Smartphone Beitritt */}
+            <div className="bg-gradient-to-b from-emerald-900/90 to-emerald-950/95 border-2 border-amber-400/50 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+              <div>
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-bold uppercase">
+                  📱 Smartphone / Spieler
+                </span>
+                <h3 className="text-2xl font-extrabold text-white mt-3 mb-2">Mit Raum-PIN beitreten</h3>
+                <p className="text-emerald-200/80 text-sm mb-5">
+                  Scanne den QR-Code vom Hauptbildschirm oder tippe den 6-stelligen PIN hier direkt ein:
+                </p>
+
+                <form onSubmit={handlePlayerJoinRoom} className="space-y-4">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={joinPinInput}
+                    onChange={(e) => setJoinPinInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="PIN (z.B. 482910)"
+                    className="w-full px-4 py-3 rounded-xl bg-black/40 border-2 border-amber-400/40 text-center font-mono text-2xl font-black tracking-widest text-amber-300 placeholder-white/25"
+                  />
+                  <input
+                    type="text"
+                    maxLength={18}
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    placeholder="Dein Spitzname..."
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/20 text-white font-semibold"
+                  />
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {AVATARS.map((av) => (
+                      <button
+                        type="button"
+                        key={av.id}
+                        onClick={() => { sound.playClick(); setPlayerAvatar(av); }}
+                        className={`p-2 rounded-xl text-2xl flex items-center justify-center transition-all ${
+                          playerAvatar.id === av.id ? 'bg-amber-500 scale-110 ring-2 ring-white' : 'bg-white/10'
+                        }`}
+                      >
+                        {av.emoji}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-red-950 font-black text-lg shadow-lg"
+                  >
+                    ▶ Jetzt beitreten!
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Karte 2: Als Host starten */}
+            <div className="bg-gradient-to-b from-red-900/90 to-red-950/95 border-2 border-red-400/30 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+              <div>
+                <span className="px-3 py-1 rounded-full bg-red-400/20 text-red-200 text-xs font-bold uppercase">
+                  💻 Beamer / Screen-Share
+                </span>
+                <h3 className="text-2xl font-extrabold text-white mt-3 mb-2">Live-Show hosten (mit QR-Code)</h3>
+                <p className="text-red-100/80 text-sm mb-6">
+                  Erzeugt sofort einen Live-Raum inklusive großem QR-Code. Deine Kollegen scannen den Code mit der Smartphone-Kamera und sind direkt in deiner Lobby!
+                </p>
+                <div className="bg-black/30 rounded-2xl p-4 border border-white/10 space-y-2 text-sm text-red-100 mb-6">
+                  <div>✅ Automatischer QR-Code für alle Handys</div>
+                  <div>✅ Echtzeit-Synchronisation ohne Anmeldung</div>
+                  <div>✅ Bis zu 1.000 Punkte + Speed-Bonus</div>
+                </div>
+              </div>
+              <button
+                onClick={createLiveRoom}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-black text-lg shadow-xl"
+              >
+                🎄 Live-Raum & QR-Code starten
+              </button>
+            </div>
+
+            {/* Karte 3: Einzelbildschirm & Editor */}
+            <div className="flex flex-col gap-6">
+              <div className="bg-gradient-to-b from-slate-900/90 to-slate-950/95 border-2 border-emerald-400/30 rounded-3xl p-6 shadow-2xl flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold uppercase">
+                    👥 Ohne Zweitgerät
+                  </span>
+                  <h3 className="text-xl font-extrabold text-white mt-2 mb-2">Moderator- / Team-Modus</h3>
+                  <p className="text-slate-300 text-sm mb-4">
+                    Alle schauen auf einen Bildschirm: Lege eure Teams an und klicke ihre Antworten direkt an.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { sound.playClick(); setView('local_setup'); }}
+                  className="w-full py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold border border-white/20"
+                >
+                  Direkt am Bildschirm spielen
+                </button>
+              </div>
+
+              <div className="bg-gradient-to-b from-amber-950/90 to-stone-950/95 border-2 border-amber-400/40 rounded-3xl p-6 shadow-2xl flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-bold uppercase">
+                    ✏️ {questions.length} Fragen aktiv
+                  </span>
+                  <h3 className="text-xl font-extrabold text-white mt-2 mb-2">Fragen-Editor</h3>
+                  <p className="text-amber-100/80 text-sm mb-4">
+                    Passe die Weihnachtsfragen an oder ergänze eigene Team-Insider!
+                  </p>
+                </div>
+                <button
+                  onClick={() => { sound.playClick(); setView('editor'); }}
+                  className="w-full py-3 rounded-2xl bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 font-bold border border-amber-400/40"
+                >
+                  Fragen bearbeiten ({questions.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+      // ==========================================
+      // RENDER: HOST LOBBY MIT QR-CODE
+      // ==========================================
+      const renderHostLobby = () => {
+        const playersList = Object.values(roomData?.players || {});
+        return (
+          <div className="relative z-10 max-w-6xl mx-auto px-4 py-6 sm:py-8">
+            <div className="bg-gradient-to-b from-red-950/95 via-emerald-950/95 to-slate-950/95 border-2 border-amber-400/60 rounded-3xl p-6 sm:p-8 shadow-2xl">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center mb-8">
+                {/* QR-Code Box */}
+                <div className="lg:col-span-5 bg-black/40 border-2 border-amber-400/50 rounded-3xl p-5 flex flex-col items-center text-center">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-amber-300 mb-3">
+                    📱 Mit Smartphone-Kamera scannen
+                  </div>
+                  <div
+                    onClick={() => setQrZoomModal(true)}
+                    className="bg-white p-3.5 rounded-2xl shadow-2xl border-4 border-amber-400 cursor-pointer hover:scale-105 transition-transform"
+                  >
+                    <img src={qrCodeImageUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain" />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => setQrZoomModal(true)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-400/20 text-amber-200 text-xs font-bold border border-amber-400/40"
+                    >
+                      🔍 Vollbild für Beamer
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(fullJoinUrl)}
+                      className="px-3 py-1.5 rounded-xl bg-white/10 text-white text-xs font-bold border border-white/15"
+                    >
+                      📋 Link kopieren
+                    </button>
+                  </div>
+                </div>
+
+                {/* Raum-PIN & Steuerung */}
+                <div className="lg:col-span-7 space-y-5 text-center lg:text-left">
+                  <div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-bold mb-2">
+                      {peerStatus === 'ready' ? '🟢 Live-Raum bereit für Smartphones' : '⏳ Verbinde Live-Server...'}
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-white">
+                      Scanne den QR-Code zum Mitspielen!
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="w-full sm:w-auto flex-1 bg-black/55 border-4 border-amber-400 rounded-3xl px-6 py-4 text-center">
+                      <div className="text-xs uppercase tracking-widest text-amber-200/80 font-bold">SPIEL-PIN:</div>
+                      <div className="font-mono text-5xl sm:text-6xl font-black tracking-widest text-amber-300">
+                        {roomPin}
+                      </div>
+                    </div>
+
+                    <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
+                      <button
+                        onClick={addDemoBotToLobby}
+                        className="flex-1 px-4 py-3 rounded-xl bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 text-xs sm:text-sm font-bold border border-amber-400/40"
+                      >
+                        + Test-Wichtel (Bot)
+                      </button>
+                      <button
+                        onClick={() => sound.playJingleBellsMotif()}
+                        className="px-4 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 text-xs font-bold border border-emerald-400/30"
+                      >
+                        🔔 Jingle abspielen
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-black/30 border border-white/10 rounded-2xl p-3 text-xs text-emerald-200 break-all font-mono">
+                    Direkt-Link: {fullJoinUrl}
+                  </div>
+                </div>
+              </div>
+
+              {/* Beigetretene Spieler */}
+              <div className="mb-8">
+                <div className="text-center text-lg font-bold text-emerald-200 mb-4">
+                  Beigetretene Spieler in der Lobby ({playersList.length})
+                </div>
+                {playersList.length === 0 ? (
+                  <div className="py-8 px-4 rounded-2xl bg-black/25 border border-dashed border-white/20 text-center text-white/70">
+                    Warte auf Kollegen per QR-Scan...
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    {playersList.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/15 border border-amber-300/40 text-white font-bold shadow-lg">
+                        <span className="text-2xl">{p.avatar}</span>
+                        <span>{p.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="text-center">
+                <button
+                  onClick={startHostGame}
+                  className="px-10 py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-red-950 font-black text-xl shadow-xl"
+                >
+                  ▶ Quiz jetzt starten ({questions.length} Fragen)
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // ==========================================
+      // RENDER: HOST GAME & SPIELER SCREEN
+      // ==========================================
+      const renderLeaderboard = (sortedPlayers, currentRound, totalRounds, onNext) => (
+        <div className="relative z-10 max-w-3xl mx-auto px-4 py-8">
+          <div className="bg-gradient-to-b from-emerald-950/95 to-slate-950/95 border-2 border-amber-400/60 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-widest text-amber-300">
+                  Zwischenstand nach Frage {currentRound} von {totalRounds}
+                </span>
+                <h2 className="text-3xl font-black text-white">🏆 Rangliste</h2>
+              </div>
+              <button
+                onClick={onNext}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-red-950 font-black text-base shadow-lg"
+              >
+                Nächste Frage ➔
+              </button>
+            </div>
+            <div className="space-y-3">
+              {sortedPlayers.map((p, idx) => (
+                <div key={p.id} className="flex items-center justify-between px-5 py-3.5 rounded-2xl bg-white/10 border border-white/15">
+                  <div className="flex items-center gap-4">
+                    <span className="w-8 h-8 rounded-full bg-amber-400 text-red-950 flex items-center justify-center font-black text-sm">
+                      {idx + 1}
+                    </span>
+                    <span className="text-2xl">{p.avatar}</span>
+                    <div>
+                      <div className="font-extrabold text-white text-lg">
+                        {p.name} {p.streak >= 2 && <span className="text-xs bg-orange-500 px-2 py-0.5 rounded-full ml-1">🔥 {p.streak}x</span>}
+                      </div>
+                      {p.lastPoints > 0 && <div className="text-xs text-emerald-300 font-bold">+{p.lastPoints} Pkt.</div>}
+                    </div>
+                  </div>
+                  <div className="font-mono text-2xl font-black text-amber-300">{p.score} Pkt.</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+
+      const renderPodium = (sortedPlayers) => {
+        const first = sortedPlayers[0];
+        const second = sortedPlayers[1];
+        const third = sortedPlayers[2];
+        return (
+          <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 text-center">
+            <div className="bg-gradient-to-b from-red-950/95 via-emerald-950/95 to-slate-950/95 border-4 border-amber-400 rounded-3xl p-6 sm:p-10 shadow-2xl">
+              <h2 className="text-4xl sm:text-5xl font-black text-white mb-10">🎄 Das Siegerpodest 🎄</h2>
+              <div className="flex items-end justify-center gap-4 sm:gap-6 mb-10 min-h-[240px]">
+                {second && (
+                  <div className="flex flex-col items-center w-28 sm:w-40">
+                    <div className="text-4xl mb-1">{second.avatar}</div>
+                    <div className="font-bold text-white truncate w-full">{second.name}</div>
+                    <div className="text-xs font-mono text-slate-300 mb-2">{second.score} Pkt.</div>
+                    <div className="w-full h-32 rounded-t-2xl bg-slate-400 text-slate-950 font-black flex items-center justify-center text-3xl">2</div>
+                  </div>
+                )}
+                {first && (
+                  <div className="flex flex-col items-center w-32 sm:w-48">
+                    <div className="text-5xl mb-1">👑 {first.avatar}</div>
+                    <div className="font-black text-amber-300 text-lg truncate w-full">{first.name}</div>
+                    <div className="text-sm font-mono font-bold text-white mb-2">{first.score} Pkt.</div>
+                    <div className="w-full h-44 rounded-t-2xl bg-gradient-to-b from-amber-300 to-amber-600 text-red-950 font-black flex items-center justify-center text-5xl">1</div>
+                  </div>
+                )}
+                {third && (
+                  <div className="flex flex-col items-center w-28 sm:w-40">
+                    <div className="text-4xl mb-1">{third.avatar}</div>
+                    <div className="font-bold text-white truncate w-full">{third.name}</div>
+                    <div className="text-xs font-mono text-amber-200 mb-2">{third.score} Pkt.</div>
+                    <div className="w-full h-24 rounded-t-2xl bg-amber-700 text-white font-black flex items-center justify-center text-2xl">3</div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setView('home')}
+                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-red-950 font-black text-lg"
+              >
+                🔄 Neues Spiel starten
+              </button>
+            </div>
+          </div>
+        );
+      };
+
+      const renderHostGame = () => {
+        if (!roomData) return null;
+        const status = roomData.status;
+        const qIndex = roomData.currentQuestionIndex || 0;
+        const totalQ = roomData.questions?.length || 0;
+        const currentQ = roomData.questions?.[qIndex];
+        const playersList = Object.values(roomData.players || {});
+        const answeredCount = playersList.filter(p => p.lastAnsweredQ === qIndex).length;
+
+        if (status === 'podium') return renderPodium(getSortedPlayers(playersList));
+        if (status === 'leaderboard') return renderLeaderboard(getSortedPlayers(playersList), qIndex + 1, totalQ, handleHostNextStep);
+        if (!currentQ) return null;
+
+        return (
+          <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-black/40 border border-white/15 rounded-2xl p-4">
+              <span className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-red-950 font-black text-sm">
+                Frage {qIndex + 1} / {totalQ}
+              </span>
+              {status === 'question' && (
+                <div className="px-5 py-2 rounded-2xl font-mono text-3xl font-black bg-emerald-950 text-amber-300 border border-amber-400/50">
+                  ⏱ {timeLeft}s
+                </div>
+              )}
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <div className="text-xs text-white/60 uppercase font-bold">Antworten</div>
+                  <div className="text-xl font-black text-white">{answeredCount} / {playersList.length}</div>
+                </div>
+                {status === 'question' ? (
+                  <button onClick={handleHostRevealAnswer} className="px-4 py-2.5 rounded-xl bg-amber-500 text-red-950 font-extrabold text-sm">
+                    Auflösen
+                  </button>
+                ) : (
+                  <button onClick={handleHostNextStep} className="px-6 py-3 rounded-xl bg-amber-400 text-red-950 font-black text-base">
+                    Weiter ➔
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white text-slate-900 rounded-3xl p-6 sm:p-10 shadow-2xl border-4 border-amber-400 text-center mb-8">
+              <h2 className="text-2xl sm:text-4xl font-black">{currentQ.text}</h2>
+            </div>
+
+            {(currentQ.type === 'mc' || currentQ.type === 'tf') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                {currentQ.options.map((opt, idx) => {
+                  const color = currentQ.type === 'tf' ? (idx === 0 ? KAHOOT_COLORS[1] : KAHOOT_COLORS[0]) : KAHOOT_COLORS[idx % 4];
+                  const isCorrect = Number(currentQ.correctIndex) === idx;
+                  const votes = playersList.filter(p => p.lastAnsweredQ === qIndex && Number(p.lastAnswer) === idx).length;
+                  return (
+                    <div
+                      key={idx}
+                      className={`rounded-2xl p-6 border-b-8 flex items-center justify-between text-white shadow-xl ${color.bg} ${color.border} ${
+                        status === 'reveal' && !isCorrect ? 'opacity-35' : ''
+                      } ${status === 'reveal' && isCorrect ? 'ring-4 ring-amber-300' : ''}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="w-12 h-12 rounded-xl bg-black/25 flex items-center justify-center text-2xl font-black">{color.shape}</span>
+                        <span className="text-xl sm:text-2xl font-extrabold">{opt}</span>
+                      </div>
+                      {status === 'reveal' && (
+                        <span className="px-3 py-1 rounded-full bg-black/40 text-sm font-black">
+                          {votes} {isCorrect ? '✓' : ''}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {currentQ.type === 'estimate' && (
+              <div className="bg-emerald-950/90 border-2 border-amber-400/50 rounded-3xl p-8 text-center mb-6">
+                {status === 'question' ? (
+                  <h3 className="text-2xl font-extrabold text-amber-300">🔢 Tippt eure Schätzung jetzt auf dem Handy ein!</h3>
+                ) : (
+                  <div>
+                    <div className="text-xs uppercase text-amber-300 font-bold">Exakte Lösung:</div>
+                    <div className="text-5xl font-black text-white mb-4">{currentQ.correctNumber}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {status === 'reveal' && currentQ.explanation && (
+              <div className="bg-amber-500/20 border-2 border-amber-400/50 rounded-2xl p-4 text-center text-amber-100 font-medium">
+                💡 {currentQ.explanation}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const renderPlayerGame = () => {
+        if (!roomData) return null;
+        const status = roomData.status;
+        const qIndex = roomData.currentQuestionIndex || 0;
+        const currentQ = roomData.questions?.[qIndex];
+        const me = roomData.players?.[myPlayerId] || { name: playerName, avatar: playerAvatar.emoji, score: 0, streak: 0 };
+
+        return (
+          <div className="relative z-10 max-w-lg mx-auto px-4 py-6">
+            <div className="flex items-center justify-between bg-black/40 border border-amber-400/30 rounded-2xl px-4 py-3 mb-6">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">{me.avatar}</span>
+                <div>
+                  <div className="font-bold text-white text-sm">{me.name}</div>
+                  <div className="text-xs text-emerald-300">PIN: {roomPin}</div>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-amber-400 text-red-950 font-black text-sm">{me.score || 0} Pkt.</div>
+            </div>
+
+            {status === 'lobby' && (
+              <div className="bg-emerald-950/90 border-2 border-amber-400/50 rounded-3xl p-8 text-center shadow-2xl">
+                <div className="text-6xl mb-4 animate-bounce">{me.avatar}</div>
+                <h3 className="text-2xl font-black text-white mb-2">Du bist drin, {me.name}!</h3>
+                <p className="text-emerald-200 text-sm">Sobald das Quiz auf dem Hauptbildschirm startet, erscheinen hier deine Buttons!</p>
+              </div>
+            )}
+
+            {status === 'question' && currentQ && (
+              <div>
+                <div className="bg-white/10 border border-white/15 rounded-2xl p-4 mb-4 text-center">
+                  <div className="text-xs uppercase font-bold text-amber-300 mb-1">Frage {qIndex + 1} • Noch {timeLeft}s</div>
+                  <p className="text-white font-bold text-base">{currentQ.text}</p>
+                </div>
+
+                {mySubmittedAnswer !== null ? (
+                  <div className="bg-emerald-950/90 border-2 border-amber-400/50 rounded-3xl p-8 text-center">
+                    <div className="text-5xl mb-3">🎁</div>
+                    <h3 className="text-xl font-black text-amber-300">Antwort gespeichert!</h3>
+                  </div>
+                ) : (
+                  <>
+                    {(currentQ.type === 'mc' || currentQ.type === 'tf') && (
+                      <div className="grid grid-cols-2 gap-3.5">
+                        {currentQ.options.map((opt, idx) => {
+                          const color = currentQ.type === 'tf' ? (idx === 0 ? KAHOOT_COLORS[1] : KAHOOT_COLORS[0]) : KAHOOT_COLORS[idx % 4];
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => submitPlayerAnswer(idx)}
+                              className={`h-36 sm:h-44 rounded-3xl border-b-8 ${color.bg} ${color.border} text-white p-4 flex flex-col items-center justify-center gap-2 shadow-xl`}
+                            >
+                              <span className="text-4xl font-black">{color.shape}</span>
+                              <span className="text-sm sm:text-base font-extrabold text-center">{opt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {currentQ.type === 'estimate' && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (estimateInput.trim() !== '') submitPlayerAnswer(estimateInput.trim());
+                        }}
+                        className="bg-emerald-950/90 border-2 border-amber-400/50 rounded-3xl p-6 text-center space-y-4"
+                      >
+                        <input
+                          type="number"
+                          step="any"
+                          value={estimateInput}
+                          onChange={(e) => setEstimateInput(e.target.value)}
+                          placeholder="Deine Schätzung..."
+                          className="w-full px-4 py-4 rounded-2xl bg-black/50 border-2 border-amber-400 text-center font-mono text-3xl font-black text-white"
+                        />
+                        <button type="submit" className="w-full py-4 rounded-2xl bg-amber-400 text-red-950 font-black text-lg">
+                          Absenden
+                        </button>
+                      </form>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {(status === 'reveal' || status === 'leaderboard') && (
+              <div className={`rounded-3xl p-8 text-center border-4 ${me.lastCorrect ? 'bg-emerald-900/95 border-emerald-400' : 'bg-red-950/95 border-red-500'}`}>
+                <div className="text-6xl mb-3">{me.lastCorrect ? '🌟' : '❄️'}</div>
+                <h3 className="text-3xl font-black text-white mb-1">{me.lastCorrect ? 'Richtig!' : 'Leider falsch!'}</h3>
+                <div className="text-xl font-extrabold text-amber-300 mb-2">+{me.lastPoints || 0} Punkte</div>
+                <p className="text-white/80 text-sm">Gesamtpunkte: <strong>{me.score}</strong></p>
+              </div>
+            )}
+
+            {status === 'podium' && (
+              <div className="bg-amber-900/90 border-2 border-amber-400 rounded-3xl p-8 text-center">
+                <h3 className="text-2xl font-black text-white mb-2">🏆 Quiz beendet!</h3>
+                <p className="text-amber-200 text-lg font-bold">Dein Endstand: {me.score} Punkte</p>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // RENDER: LOKALER MODUS & FRAGEN-EDITOR
+      // ==========================================
+      const renderLocalSetup = () => (
+        <div className="relative z-10 max-w-3xl mx-auto px-4 py-8">
+          <div className="bg-emerald-950/90 border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <h2 className="text-2xl font-black text-white mb-4">👥 Teams für Einzelbildschirm anlegen</h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newTeamName.trim()) return;
+                sound.playJoin();
+                setLocalTeams([...localTeams, { id: `t_${Date.now()}`, name: newTeamName.trim(), avatar: newTeamAvatar.emoji, score: 0, streak: 0, lastPoints: 0 }]);
+                setNewTeamName('');
+              }}
+              className="flex flex-col sm:flex-row gap-3 mb-6"
+            >
+              <input
+                type="text"
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                placeholder="Teamname..."
+                className="flex-1 px-4 py-2.5 rounded-xl bg-black/40 border border-white/20 text-white font-semibold"
+              />
+              <button type="submit" className="px-5 py-2.5 rounded-xl bg-amber-500 text-red-950 font-black">+ Hinzufügen</button>
+            </form>
+            <div className="space-y-2 mb-6">
+              {localTeams.map(t => (
+                <div key={t.id} className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white/10">
+                  <span className="font-bold text-white text-lg">{t.avatar} {t.name}</span>
+                  <button onClick={() => setLocalTeams(localTeams.filter(x => x.id !== t.id))} className="text-red-300 text-sm font-bold">Löschen</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={startLocalModeGame} className="w-full py-4 rounded-2xl bg-amber-400 text-red-950 font-black text-xl">
+              ▶ Quiz starten
+            </button>
+          </div>
+        </div>
+      );
+
+      const renderLocalGame = () => {
+        const { qIndex, phase, teamAnswers, activeTeamId } = localGameState;
+        const currentQ = questions[qIndex];
+        if (phase === 'podium') return renderPodium(getSortedPlayers(localTeams));
+        if (phase === 'leaderboard') return renderLeaderboard(getSortedPlayers(localTeams), qIndex + 1, questions.length, nextLocalStep);
+        if (!currentQ) return null;
+
+        return (
+          <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
+            <div className="flex items-center justify-between mb-5 bg-black/40 rounded-2xl p-4">
+              <span className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-red-950 font-black text-sm">Frage {qIndex + 1} / {questions.length}</span>
+              {phase === 'question' ? (
+                <button onClick={revealLocalQuestion} className="px-5 py-2.5 rounded-xl bg-amber-500 text-red-950 font-black text-sm">Auflösen</button>
+              ) : (
+                <button onClick={nextLocalStep} className="px-6 py-2.5 rounded-xl bg-amber-400 text-red-950 font-black text-sm">Weiter ➔</button>
+              )}
+            </div>
+
+            {phase === 'question' && (
+              <div className="flex flex-wrap justify-center gap-2 mb-5">
+                {localTeams.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setLocalGameState(prev => ({ ...prev, activeTeamId: t.id }))}
+                    className={`px-4 py-2 rounded-2xl font-bold text-sm border-2 ${
+                      activeTeamId === t.id ? 'bg-amber-400 text-red-950 border-white' : 'bg-black/40 text-white border-white/15'
+                    }`}
+                  >
+                    {t.avatar} {t.name} {teamAnswers[t.id] ? '✓' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 text-center mb-6">
+              <h2 className="text-2xl sm:text-3xl font-black">{currentQ.text}</h2>
+            </div>
+
+            {(currentQ.type === 'mc' || currentQ.type === 'tf') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {currentQ.options.map((opt, idx) => {
+                  const color = currentQ.type === 'tf' ? (idx === 0 ? KAHOOT_COLORS[1] : KAHOOT_COLORS[0]) : KAHOOT_COLORS[idx % 4];
+                  return (
+                    <button
+                      key={idx}
+                      disabled={phase !== 'question'}
+                      onClick={() => recordLocalTeamAnswer(activeTeamId, idx)}
+                      className={`rounded-2xl p-6 border-b-8 flex items-center justify-between text-white ${color.bg} ${color.border}`}
+                    >
+                      <span className="text-xl font-extrabold">{color.shape} {opt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const renderEditor = () => {
+        const updateQuestionField = (idx, field, value) => {
+          const updated = [...questions];
+          updated[idx] = { ...updated[idx], [field]: value };
+          setQuestions(updated);
+        };
+
+        const updateOptionText = (qIdx, optIdx, text) => {
+          const updated = [...questions];
+          const opts = [...(updated[qIdx].options || ['Antwort A', 'Antwort B', 'Antwort C', 'Antwort D'])];
+          opts[optIdx] = text;
+          updated[qIdx] = { ...updated[qIdx], options: opts };
+          setQuestions(updated);
+        };
+
+        const addNewQuestion = (type) => {
+          sound.playClick();
+          const newQ = {
+            id: `q_${Date.now()}`,
+            type,
+            text: type === 'estimate' ? 'Neue Schätzfrage: Wie viele...?' : 'Neue Weihnachtsfrage hier eingeben...',
+            timeLimit: 20,
+            options: type === 'tf' ? ['Wahr', 'Falsch'] : ['Antwort A', 'Antwort B', 'Antwort C', 'Antwort D'],
+            correctIndex: 0,
+            correctNumber: 100,
+            tolerance: 25,
+            explanation: ''
+          };
+          saveCustomQuestions([...questions, newQ]);
+        };
+
+        const moveQuestion = (idx, dir) => {
+          const targetIdx = idx + dir;
+          if (targetIdx < 0 || targetIdx >= questions.length) return;
+          const updated = [...questions];
+          const temp = updated[idx];
+          updated[idx] = updated[targetIdx];
+          updated[targetIdx] = temp;
+          setQuestions(updated);
+        };
+
+        const exportQuestionsJson = () => {
+          sound.playClick();
+          const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(questions, null, 2));
+          const a = document.createElement('a');
+          a.setAttribute('href', dataStr);
+          a.setAttribute('download', 'weihnachtsquiz_fragen.json');
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        };
+
+        const importQuestionsJson = (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const parsed = JSON.parse(ev.target.result);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                saveCustomQuestions(parsed);
+                showToast(`${parsed.length} Fragen erfolgreich importiert!`);
+              }
+            } catch (err) {
+              showToast('Datei konnte nicht gelesen werden.');
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        return (
+          <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
+            <div className="bg-slate-950/95 border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 shadow-2xl">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-white/15">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white">✏️ Fragen- & Antworten-Editor ({questions.length})</h2>
+                  <p className="text-sm text-emerald-300 mt-1">
+                    Klicke bei Multiple Choice / Wahr-Falsch einfach den Kreis neben der richtigen Antwort an!
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => saveCustomQuestions(DEFAULT_QUESTIONS)}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white border border-white/15"
+                  >
+                    Standard-Set (10 Fragen)
+                  </button>
+                  <button
+                    onClick={exportQuestionsJson}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-amber-300 border border-amber-400/30"
+                  >
+                    💾 Backup (JSON)
+                  </button>
+                  <label className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-emerald-300 border border-emerald-400/30 cursor-pointer">
+                    📂 JSON laden
+                    <input type="file" accept=".json" onChange={importQuestionsJson} className="hidden" />
+                  </label>
+                  <button
+                    onClick={() => saveCustomQuestions(questions)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-red-950 font-black text-sm shadow-lg"
+                  >
+                    ✔ Alle Änderungen speichern
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-6 mb-8">
+                {questions.map((q, idx) => (
+                  <div key={q.id || idx} className="bg-white/5 border border-white/15 rounded-2xl p-5 space-y-4">
+                    {/* Kopfzeile der Frage: Nummer, Typ, Zeitlimit, Sortieren & Löschen */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-1 rounded-lg bg-amber-500 text-red-950 font-black text-xs">
+                          Frage #{idx + 1}
+                        </span>
+
+                        <select
+                          value={q.type}
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            const updated = [...questions];
+                            updated[idx] = {
+                              ...q,
+                              type: newType,
+                              options:
+                                newType === 'tf'
+                                  ? ['Wahr', 'Falsch']
+                                  : q.options?.length === 4
+                                  ? q.options
+                                  : ['Antwort A', 'Antwort B', 'Antwort C', 'Antwort D'],
+                              correctIndex: 0,
+                              correctNumber: q.correctNumber ?? 100,
+                              tolerance: q.tolerance ?? 25
+                            };
+                            setQuestions(updated);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-950 text-amber-300 border border-amber-400/40 text-xs font-bold"
+                        >
+                          <option value="mc">Multiple Choice (4 Antworten)</option>
+                          <option value="tf">Wahr oder Falsch</option>
+                          <option value="estimate">🔢 Schätzfrage (Zahlenwert)</option>
+                        </select>
+
+                        <select
+                          value={q.timeLimit || 20}
+                          onChange={(e) => updateQuestionField(idx, 'timeLimit', Number(e.target.value))}
+                          className="px-3 py-1.5 rounded-lg bg-black/50 text-white border border-white/20 text-xs font-bold"
+                        >
+                          <option value={10}>⏱ 10 Sek.</option>
+                          <option value={15}>⏱ 15 Sek.</option>
+                          <option value={20}>⏱ 20 Sek.</option>
+                          <option value={30}>⏱ 30 Sek.</option>
+                          <option value={45}>⏱ 45 Sek.</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => moveQuestion(idx, -1)}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold"
+                          title="Nach oben schieben"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveQuestion(idx, 1)}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold"
+                          title="Nach unten schieben"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (questions.length <= 1) {
+                              showToast('Mindestens 1 Frage muss im Quiz bleiben!');
+                              return;
+                            }
+                            saveCustomQuestions(questions.filter((_, i) => i !== idx));
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-xs text-red-300 font-bold ml-1"
+                        >
+                          🗑 Löschen
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Fragetext Eingabe */}
+                    <div>
+                      <label className="block text-xs text-white/60 font-bold uppercase mb-1">Fragetext:</label>
+                      <input
+                        type="text"
+                        value={q.text}
+                        onChange={(e) => updateQuestionField(idx, 'text', e.target.value)}
+                        placeholder="Deine Weihnachtsfrage hier eingeben..."
+                        className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/20 text-white font-bold focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    {/* Antworten für Multiple Choice & Wahr/Falsch */}
+                    {(q.type === 'mc' || q.type === 'tf') && (
+                      <div>
+                        <label className="block text-xs text-emerald-300 font-bold uppercase mb-2">
+                          Antwortmöglichkeiten (Klicke den Kreis links für die RICHTIGE Antwort an):
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {(q.options || []).map((opt, optIdx) => {
+                            const isCorrect = Number(q.correctIndex) === optIdx;
+                            const color = q.type === 'tf' ? (optIdx === 0 ? KAHOOT_COLORS[1] : KAHOOT_COLORS[0]) : KAHOOT_COLORS[optIdx % 4];
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`flex items-center gap-3 p-2.5 rounded-xl border-2 transition-all ${
+                                  isCorrect
+                                    ? 'bg-emerald-900/60 border-emerald-400 shadow-md'
+                                    : 'bg-black/35 border-white/15'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`correct_option_${idx}`}
+                                  checked={isCorrect}
+                                  onChange={() => updateQuestionField(idx, 'correctIndex', optIdx)}
+                                  className="w-5 h-5 accent-emerald-400 cursor-pointer shrink-0"
+                                  title="Als richtige Antwort markieren"
+                                />
+                                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black text-white shrink-0 ${color.bg}`}>
+                                  {color.shape}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  disabled={q.type === 'tf'}
+                                  onChange={(e) => updateOptionText(idx, optIdx, e.target.value)}
+                                  placeholder={`Antwort ${optIdx + 1}...`}
+                                  className="flex-1 bg-transparent text-white text-sm font-bold focus:outline-none"
+                                />
+                                {isCorrect && (
+                                  <span className="text-[11px] bg-emerald-400 text-emerald-950 font-black px-2 py-0.5 rounded-full shrink-0">
+                                    ✓ Richtig
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Zielwert & Toleranz für Schätzfragen */}
+                    {q.type === 'estimate' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black/35 p-4 rounded-xl border border-amber-400/30">
+                        <div>
+                          <label className="block text-xs text-amber-300 font-bold mb-1">
+                            🎯 Exakte richtige Zahl (Lösung):
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={q.correctNumber ?? 100}
+                            onChange={(e) => updateQuestionField(idx, 'correctNumber', Number(e.target.value))}
+                            className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/20 text-white font-mono text-lg font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-emerald-300 font-bold mb-1">
+                            📏 Toleranzbereich (± Abweichung für Punkte):
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={q.tolerance ?? 25}
+                            onChange={(e) => updateQuestionField(idx, 'tolerance', Number(e.target.value))}
+                            className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/20 text-white font-mono text-lg font-bold"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Optionale Fun-Fact Erklärung */}
+                    <div>
+                      <input
+                        type="text"
+                        value={q.explanation || ''}
+                        onChange={(e) => updateQuestionField(idx, 'explanation', e.target.value)}
+                        placeholder="💡 Optional: Kurze Erklärung oder Fun-Fact (wird nach der Auflösung eingeblendet)..."
+                        className="w-full px-3.5 py-2 rounded-xl bg-black/25 border border-white/10 text-amber-200/90 text-xs focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Buttons zum Hinzufügen neuer Fragen */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/15">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => addNewQuestion('mc')}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg"
+                  >
+                    + Multiple Choice Frage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addNewQuestion('tf')}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg"
+                  >
+                    + Wahr/Falsch Frage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addNewQuestion('estimate')}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-red-950 font-black text-sm shadow-lg"
+                  >
+                    + Schätzfrage
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => saveCustomQuestions(questions)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-red-950 font-black text-sm shadow-xl"
+                >
+                  ✔ Alle Änderungen speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-red-950 via-emerald-950 to-slate-950 text-white relative overflow-x-hidden">
+          <SnowfallOverlay enabled={snowEnabled} />
+          {renderHeader()}
+
+          {notification && (
+            <div className="fixed bottom-5 right-5 z-50 px-5 py-3.5 rounded-2xl bg-amber-400 text-red-950 font-extrabold text-sm shadow-2xl border-2 border-white">
+              🔔 {notification}
+            </div>
+          )}
+
+          {qrZoomModal && roomPin && (
+            <div onClick={() => setQrZoomModal(false)} className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+              <div onClick={(e) => e.stopPropagation()} className="bg-gradient-to-b from-red-950 to-emerald-950 border-4 border-amber-400 rounded-3xl p-8 max-w-lg w-full text-center">
+                <h3 className="text-3xl font-black text-white mb-4">SPIEL-PIN: <span className="font-mono text-amber-300">{roomPin}</span></h3>
+                <div className="bg-white p-5 rounded-3xl inline-block mb-6">
+                  <img src={qrCodeImageUrl} alt="QR" className="w-72 h-72 object-contain" />
+                </div>
+                <button onClick={() => setQrZoomModal(false)} className="w-full py-3.5 rounded-2xl bg-amber-400 text-red-950 font-black text-lg">
+                  Schließen
+                </button>
+              </div>
+            </div>
+          )}
+
+          <main className="pb-16">
+            {view === 'home' && renderHome()}
+            {view === 'player_join' && renderPlayerJoinScreen()}
+            {view === 'host_lobby' && renderHostLobby()}
+            {view === 'host_game' && renderHostGame()}
+            {view === 'player_game' && renderPlayerGame()}
+            {view === 'local_setup' && renderLocalSetup()}
+            {view === 'local_game' && renderLocalGame()}
+            {view === 'editor' && renderEditor()}
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
